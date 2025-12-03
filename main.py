@@ -1,14 +1,16 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import imaplib
+import email
+from email.header import decode_header
+import json
 import pickle
 import os
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-import base64
-import json
 
 # Gmail API scopes
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly',
@@ -16,20 +18,18 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly',
 
 # Page configuration
 st.set_page_config(
-    page_title="Gmail Spam Cleaner Pro - Real Data",
+    page_title="Gmail Spam Cleaner - Multiple Login Options",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Enhanced CSS with data source indicators
+# Enhanced CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
     
-    * {
-        font-family: 'Inter', sans-serif;
-    }
+    * { font-family: 'Inter', sans-serif; }
     
     .stApp {
         background: linear-gradient(135deg, #0a0f0d 0%, #1a2f24 100%);
@@ -39,42 +39,19 @@ st.markdown("""
         background: linear-gradient(135deg, #1a2e23 0%, #0f1e17 100%);
         border-radius: 24px;
         padding: 2rem;
-        max-width: 1400px;
         box-shadow: 0 8px 32px rgba(0, 255, 100, 0.2);
         border: 1px solid rgba(0, 255, 100, 0.2);
     }
     
-    /* Real Data Badge */
-    .real-data-badge {
-        background: linear-gradient(135deg, #00ff64 0%, #00cc50 100%);
-        color: #000;
-        padding: 8px 20px;
-        border-radius: 25px;
-        font-size: 0.9rem;
-        font-weight: 900;
-        text-transform: uppercase;
-        display: inline-block;
-        box-shadow: 0 0 20px rgba(0, 255, 100, 0.6);
-        animation: pulse 2s ease-in-out infinite;
+    .login-box {
+        background: linear-gradient(135deg, #234a38 0%, #1a3829 100%);
+        border: 2px solid rgba(0, 255, 100, 0.3);
+        border-radius: 20px;
+        padding: 2.5rem;
+        margin: 1.5rem auto;
+        box-shadow: 0 10px 40px rgba(0, 255, 100, 0.2);
     }
     
-    .demo-data-badge {
-        background: linear-gradient(135deg, #ff8800 0%, #ffaa00 100%);
-        color: #000;
-        padding: 8px 20px;
-        border-radius: 25px;
-        font-size: 0.9rem;
-        font-weight: 900;
-        text-transform: uppercase;
-        display: inline-block;
-    }
-    
-    @keyframes pulse {
-        0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 100, 0.6); }
-        50% { box-shadow: 0 0 40px rgba(0, 255, 100, 1); }
-    }
-    
-    /* User account header */
     .user-header {
         background: linear-gradient(135deg, #00ff64 0%, #00cc50 100%);
         border-radius: 16px;
@@ -84,12 +61,6 @@ st.markdown("""
         align-items: center;
         justify-content: space-between;
         box-shadow: 0 4px 20px rgba(0, 255, 100, 0.3);
-    }
-    
-    .user-info {
-        display: flex;
-        align-items: center;
-        gap: 1.5rem;
     }
     
     .user-avatar {
@@ -103,24 +74,29 @@ st.markdown("""
         font-size: 2rem;
         font-weight: 900;
         color: #00cc50;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
     
     .user-email {
         font-size: 1.6rem;
         font-weight: 900;
         color: #000;
-        margin: 0;
     }
     
-    .user-status {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #0a4a2a;
-        margin: 0.3rem 0 0 0;
+    .live-badge {
+        background: linear-gradient(135deg, #ff3366 0%, #ff1744 100%);
+        color: white;
+        padding: 8px 20px;
+        border-radius: 25px;
+        font-size: 0.9rem;
+        font-weight: 900;
+        animation: pulse 2s ease-in-out infinite;
     }
     
-    /* Main title */
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.6); }
+        50% { box-shadow: 0 0 40px rgba(255, 0, 0, 1); }
+    }
+    
     .main-title {
         text-align: center;
         font-size: 3.5rem;
@@ -138,7 +114,6 @@ st.markdown("""
         margin-bottom: 2rem;
     }
     
-    /* Stats boxes */
     .stat-box {
         background: linear-gradient(135deg, #00ff64 0%, #00cc50 100%);
         border-radius: 16px;
@@ -150,14 +125,12 @@ st.markdown("""
     
     .stat-box:hover {
         transform: translateY(-5px);
-        box-shadow: 0 8px 30px rgba(0, 255, 100, 0.5);
     }
     
     .stat-number {
         font-size: 3rem;
         font-weight: 900;
         color: #000;
-        margin: 0.5rem 0;
     }
     
     .stat-label {
@@ -165,29 +138,8 @@ st.markdown("""
         font-weight: 700;
         color: #0a4a2a;
         text-transform: uppercase;
-        letter-spacing: 1px;
     }
     
-    /* Section panels */
-    .section-panel {
-        background: rgba(30, 60, 45, 0.6);
-        border: 2px solid rgba(0, 255, 100, 0.3);
-        border-radius: 20px;
-        padding: 2rem;
-        margin: 1.5rem 0;
-    }
-    
-    .section-title {
-        font-size: 1.8rem;
-        font-weight: 800;
-        color: #00ff64;
-        margin-bottom: 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.8rem;
-    }
-    
-    /* Email items with data source indicator */
     .email-item {
         background: linear-gradient(135deg, #234a38 0%, #1a3829 100%);
         border-left: 5px solid #00ff64;
@@ -195,23 +147,16 @@ st.markdown("""
         padding: 1.5rem;
         margin: 1rem 0;
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s ease;
         position: relative;
     }
     
-    .email-item:hover {
-        border-left-width: 8px;
-        transform: translateX(8px);
-        box-shadow: 0 4px 20px rgba(0, 255, 100, 0.3);
-    }
-    
-    .email-item.real-data::before {
+    .email-item::before {
         content: '🔴 LIVE';
         position: absolute;
         top: 10px;
         right: 10px;
-        background: #00ff64;
-        color: #000;
+        background: #ff1744;
+        color: white;
         padding: 4px 12px;
         border-radius: 12px;
         font-size: 0.75rem;
@@ -230,19 +175,15 @@ st.markdown("""
         font-size: 1.1rem;
         font-weight: 600;
         color: #b3ffcc;
-        margin-bottom: 0.5rem;
     }
     
     .email-meta {
         font-size: 0.95rem;
-        font-weight: 500;
         color: #80ff9f;
-        opacity: 0.9;
     }
     
     .email-preview {
         font-size: 1rem;
-        font-weight: 500;
         color: #99ffb3;
         margin-top: 0.8rem;
         padding-top: 0.8rem;
@@ -250,7 +191,6 @@ st.markdown("""
         font-style: italic;
     }
     
-    /* Badges */
     .spam-badge {
         background: linear-gradient(135deg, #ff3366 0%, #ff1744 100%);
         color: white;
@@ -258,25 +198,10 @@ st.markdown("""
         border-radius: 20px;
         font-size: 0.85rem;
         font-weight: 800;
-        text-transform: uppercase;
         display: inline-block;
         margin-left: 10px;
-        box-shadow: 0 2px 12px rgba(255, 0, 0, 0.4);
     }
     
-    .category-badge {
-        background: rgba(255, 165, 0, 0.9);
-        color: #000;
-        padding: 4px 10px;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        display: inline-block;
-        margin: 0 4px;
-    }
-    
-    /* Buttons */
     .stButton>button {
         width: 100%;
         background: linear-gradient(135deg, #00ff64 0%, #00cc50 100%);
@@ -287,7 +212,6 @@ st.markdown("""
         font-size: 1.1rem;
         font-weight: 800;
         text-transform: uppercase;
-        letter-spacing: 1px;
         transition: all 0.3s ease;
         box-shadow: 0 4px 16px rgba(0, 255, 100, 0.4);
     }
@@ -295,16 +219,29 @@ st.markdown("""
     .stButton>button:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 24px rgba(0, 255, 100, 0.6);
-        background: linear-gradient(135deg, #00ff88 0%, #00dd64 100%);
     }
     
-    /* Tabs */
+    .stTextInput input, .stTextInput input[type="password"] {
+        background: rgba(30, 60, 45, 0.6) !important;
+        border: 2px solid rgba(0, 255, 100, 0.3) !important;
+        border-radius: 10px !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        font-size: 1.1rem !important;
+        padding: 0.8rem !important;
+    }
+    
+    .stTextInput label {
+        color: #00ff64 !important;
+        font-weight: 800 !important;
+        font-size: 1.1rem !important;
+    }
+    
     .stTabs [data-baseweb="tab-list"] {
         gap: 12px;
         background: rgba(30, 60, 45, 0.5);
         border-radius: 16px;
         padding: 1rem;
-        border: 1px solid rgba(0, 255, 100, 0.2);
     }
     
     .stTabs [data-baseweb="tab"] {
@@ -313,7 +250,6 @@ st.markdown("""
         font-weight: 800;
         font-size: 1rem;
         color: #7fff9f;
-        transition: all 0.3s ease;
     }
     
     .stTabs [aria-selected="true"] {
@@ -322,126 +258,84 @@ st.markdown("""
         box-shadow: 0 4px 16px rgba(0, 255, 100, 0.4);
     }
     
-    /* Alerts */
-    .stSuccess {
-        background: rgba(0, 255, 100, 0.15) !important;
-        border: 2px solid #00ff64 !important;
-        border-radius: 12px !important;
-        color: #00ff64 !important;
-        font-weight: 700 !important;
+    .upload-box {
+        border: 3px dashed rgba(0, 255, 100, 0.5);
+        border-radius: 15px;
+        padding: 2rem;
+        text-align: center;
+        background: rgba(0, 255, 100, 0.05);
+        transition: all 0.3s;
     }
     
-    .stWarning {
-        background: rgba(255, 165, 0, 0.15) !important;
-        border: 2px solid #ffaa00 !important;
-        border-radius: 12px !important;
-        color: #ffcc00 !important;
-        font-weight: 700 !important;
+    .upload-box:hover {
+        border-color: #00ff64;
+        background: rgba(0, 255, 100, 0.1);
     }
     
-    .stInfo {
-        background: rgba(0, 200, 255, 0.15) !important;
-        border: 2px solid #00ccff !important;
-        border-radius: 12px !important;
-        color: #66ddff !important;
-        font-weight: 700 !important;
-    }
-    
-    /* Form inputs */
-    .stSelectbox > div > div,
-    .stTextArea textarea,
-    .stTextInput input {
-        background: rgba(30, 60, 45, 0.6) !important;
-        border: 2px solid rgba(0, 255, 100, 0.3) !important;
-        border-radius: 10px !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    
-    h1, h2, h3, h4 {
-        color: #00ff64 !important;
-        font-weight: 800 !important;
-    }
-    
-    p, li, span, label {
-        color: #b3ffcc !important;
-        font-weight: 500 !important;
-    }
-    
-    .stDataFrame {
-        border: 2px solid rgba(0, 255, 100, 0.3);
-        border-radius: 12px;
-        overflow: hidden;
-    }
-    
-    .stProgress > div > div > div {
-        background: linear-gradient(90deg, #00ff64 0%, #00cc50 100%);
-    }
+    h1, h2, h3 { color: #00ff64 !important; font-weight: 800 !important; }
+    p, li { color: #b3ffcc !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # Initialize session state
-if 'service' not in st.session_state:
-    st.session_state.service = None
-if 'user_email' not in st.session_state:
-    st.session_state.user_email = None
-if 'real_emails' not in st.session_state:
-    st.session_state.real_emails = []
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'email' not in st.session_state:
+    st.session_state.email = None
+if 'connection_type' not in st.session_state:
+    st.session_state.connection_type = None
+if 'imap_conn' not in st.session_state:
+    st.session_state.imap_conn = None
+if 'gmail_service' not in st.session_state:
+    st.session_state.gmail_service = None
+if 'spam_emails' not in st.session_state:
+    st.session_state.spam_emails = []
 if 'deleted' not in st.session_state:
     st.session_state.deleted = 0
-if 'scan_count' not in st.session_state:
-    st.session_state.scan_count = 0
-if 'is_real_data' not in st.session_state:
-    st.session_state.is_real_data = False
 
-# REAL Gmail Authentication Functions
-def authenticate_gmail():
-    """Authenticate with Gmail API using OAuth2"""
-    creds = None
-    
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            creds = pickle.load(token)
-    
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            if not os.path.exists('credentials.json'):
-                st.error("❌ credentials.json not found!")
-                st.info("""
-                **To get credentials.json:**
-                1. Go to [Google Cloud Console](https://console.cloud.google.com)
-                2. Create project → Enable Gmail API
-                3. Create OAuth 2.0 credentials (Desktop app)
-                4. Download as credentials.json
-                """)
-                return None
-            
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
+# Gmail API Functions
+def authenticate_gmail_api(credentials_json):
+    """Authenticate using uploaded credentials.json"""
+    try:
+        # Save uploaded file temporarily
+        with open('temp_credentials.json', 'w') as f:
+            f.write(credentials_json)
         
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
-    
-    return build('gmail', 'v1', credentials=creds)
+        creds = None
+        
+        if os.path.exists('token.pickle'):
+            with open('token.pickle', 'rb') as token:
+                creds = pickle.load(token)
+        
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    'temp_credentials.json', SCOPES)
+                creds = flow.run_local_server(port=0)
+            
+            with open('token.pickle', 'wb') as token:
+                pickle.dump(creds, token)
+        
+        # Clean up temp file
+        if os.path.exists('temp_credentials.json'):
+            os.remove('temp_credentials.json')
+        
+        return build('gmail', 'v1', credentials=creds)
+    except Exception as e:
+        return None, str(e)
 
-def get_user_profile(service):
-    """Get user's Gmail profile"""
+def get_user_profile_api(service):
+    """Get user profile via API"""
     try:
         profile = service.users().getProfile(userId='me').execute()
-        return {
-            'email': profile['emailAddress'],
-            'total_messages': profile['messagesTotal'],
-            'threads_total': profile['threadsTotal']
-        }
-    except Exception as e:
-        st.error(f"Error: {str(e)}")
+        return profile['emailAddress']
+    except:
         return None
 
-def get_spam_emails(service, max_results=50):
-    """Fetch REAL spam emails from user's Gmail"""
+def get_spam_emails_api(service, max_results=50):
+    """Fetch spam via Gmail API"""
     try:
         results = service.users().messages().list(
             userId='me',
@@ -450,10 +344,6 @@ def get_spam_emails(service, max_results=50):
         ).execute()
         
         messages = results.get('messages', [])
-        
-        if not messages:
-            return []
-        
         spam_emails = []
         
         for msg in messages:
@@ -464,11 +354,9 @@ def get_spam_emails(service, max_results=50):
             ).execute()
             
             headers = message['payload']['headers']
-            
             subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
             sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
             date = next((h['value'] for h in headers if h['name'] == 'Date'), 'Unknown')
-            
             snippet = message.get('snippet', 'No preview')
             
             spam_emails.append({
@@ -476,387 +364,395 @@ def get_spam_emails(service, max_results=50):
                 'subject': subject,
                 'sender': sender,
                 'date': date,
-                'snippet': snippet,
+                'preview': snippet,
                 'size': message.get('sizeEstimate', 0),
-                'is_real': True  # Flag to show this is real data
+                'is_real': True
             })
         
         return spam_emails
-    
     except Exception as e:
-        st.error(f"Error fetching emails: {str(e)}")
+        st.error(f"Error: {str(e)}")
         return []
 
-def trash_email(service, email_id):
-    """Move email to trash"""
+def trash_email_api(service, email_id):
+    """Trash email via API"""
     try:
         service.users().messages().trash(userId='me', id=email_id).execute()
         return True
-    except Exception as e:
-        st.error(f"Error: {str(e)}")
+    except:
         return False
 
-def bulk_trash_emails(service, email_ids):
-    """Trash multiple emails"""
-    success = 0
-    for email_id in email_ids:
-        if trash_email(service, email_id):
-            success += 1
-    return success
+# IMAP Functions
+def connect_to_gmail_imap(email, password):
+    """Connect via IMAP"""
+    try:
+        imap = imaplib.IMAP4_SSL("imap.gmail.com")
+        imap.login(email, password)
+        return imap, None
+    except Exception as e:
+        return None, str(e)
 
-# Sidebar
-with st.sidebar:
-    st.markdown("### 🔐 Gmail Connection")
+def get_spam_emails_imap(imap, max_emails=50):
+    """Fetch spam via IMAP"""
+    try:
+        imap.select('"[Gmail]/Spam"')
+        status, messages = imap.search(None, 'ALL')
+        
+        if status != 'OK':
+            return []
+        
+        email_ids = messages[0].split()
+        email_ids = email_ids[-max_emails:]
+        spam_emails = []
+        
+        for email_id in email_ids:
+            status, msg_data = imap.fetch(email_id, '(RFC822)')
+            if status != 'OK':
+                continue
+            
+            msg = email.message_from_bytes(msg_data[0][1])
+            
+            subject = decode_header(msg['Subject'])[0][0]
+            if isinstance(subject, bytes):
+                subject = subject.decode()
+            
+            sender = msg.get('From', 'Unknown')
+            date = msg.get('Date', 'Unknown')
+            
+            body = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload(decode=True).decode()[:300]
+                        break
+            else:
+                try:
+                    body = msg.get_payload(decode=True).decode()[:300]
+                except:
+                    body = "Preview unavailable"
+            
+            spam_emails.append({
+                'id': email_id.decode(),
+                'subject': subject or 'No Subject',
+                'sender': sender,
+                'date': date,
+                'preview': body or 'No preview',
+                'is_real': True
+            })
+        
+        return spam_emails
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return []
+
+def delete_email_imap(imap, email_id):
+    """Delete via IMAP"""
+    try:
+        imap.select('"[Gmail]/Spam"')
+        imap.store(email_id, '+FLAGS', '\\Deleted')
+        imap.expunge()
+        return True
+    except:
+        return False
+
+# Main App
+if not st.session_state.logged_in:
+    # Login Page
+    st.markdown('<h1 class="main-title">🛡️ Gmail Spam Cleaner Pro</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Choose Your Login Method</p>', unsafe_allow_html=True)
     
-    if st.session_state.service is None:
+    # Login method tabs
+    tab1, tab2 = st.tabs(["📧 Email + Password Login", "📁 Upload JSON Credentials"])
+    
+    # TAB 1: Email/Password Login (IMAP)
+    with tab1:
+        st.markdown('<div class="login-box">', unsafe_allow_html=True)
+        
+        st.markdown("### 🔐 Direct Login (IMAP)")
+        
         st.info("""
-        **Connect Your Gmail:**
-        
-        1. Download `credentials.json`
-        2. Place in app folder
-        3. Click Connect below
-        
-        [Setup Guide →](https://developers.google.com/gmail/api/quickstart/python)
+        **Quick & Easy Login:**
+        - No API setup needed
+        - Just use App Password
+        - Works immediately
         """)
         
-        if st.button("🔗 CONNECT GMAIL", type="primary", use_container_width=True):
-            with st.spinner("🔐 Authenticating..."):
-                service = authenticate_gmail()
-                if service:
-                    st.session_state.service = service
-                    profile = get_user_profile(service)
-                    if profile:
-                        st.session_state.user_email = profile['email']
-                        st.session_state.is_real_data = True
-                        st.success("✅ Connected!")
+        email_input = st.text_input("📧 Gmail Address", placeholder="your.email@gmail.com", key="imap_email")
+        password_input = st.text_input("🔑 App Password", type="password", placeholder="16-character App Password", key="imap_pass")
+        
+        st.warning("""
+        **⚠️ Use an App Password:**
+        1. Go to [Google Account Security](https://myaccount.google.com/security)
+        2. Enable 2-Step Verification
+        3. Go to "App Passwords"
+        4. Generate password for "Mail"
+        5. Paste here (remove spaces)
+        """)
+        
+        if st.button("🔓 LOGIN WITH IMAP", type="primary", use_container_width=True, key="imap_login"):
+            if email_input and password_input:
+                with st.spinner("🔐 Connecting to Gmail via IMAP..."):
+                    imap, error = connect_to_gmail_imap(email_input, password_input)
+                    
+                    if imap:
+                        st.session_state.logged_in = True
+                        st.session_state.email = email_input
+                        st.session_state.imap_conn = imap
+                        st.session_state.connection_type = "IMAP"
+                        st.success("✅ Connected via IMAP!")
                         st.balloons()
                         st.rerun()
-    else:
-        # Show real account info
-        st.success("✅ **CONNECTED**")
-        st.markdown(f"""
-        <div style="background: rgba(0, 255, 100, 0.1); padding: 1rem; border-radius: 10px; border: 2px solid rgba(0, 255, 100, 0.3);">
-            <div style="color: #00ff64; font-weight: 800; font-size: 1rem; margin-bottom: 0.5rem;">
-                📧 Your Account
-            </div>
-            <div style="color: white; font-weight: 700; word-break: break-all;">
-                {st.session_state.user_email}
-            </div>
-            <div style="color: #7fff9f; font-weight: 600; font-size: 0.9rem; margin-top: 0.5rem;">
-                🔴 LIVE DATA MODE
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+                    else:
+                        st.error(f"❌ Login failed: {error}")
+            else:
+                st.error("Please enter both email and password")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # TAB 2: JSON Upload (Gmail API)
+    with tab2:
+        st.markdown('<div class="login-box">', unsafe_allow_html=True)
+        
+        st.markdown("### 📁 Upload credentials.json")
+        
+        st.info("""
+        **API Method (More Features):**
+        - Full Gmail API access
+        - More reliable
+        - Advanced features
+        """)
+        
+        st.markdown('<div class="upload-box">', unsafe_allow_html=True)
+        
+        uploaded_file = st.file_uploader(
+            "📤 Upload your credentials.json file",
+            type=['json'],
+            help="Download from Google Cloud Console"
+        )
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if uploaded_file is not None:
+            st.success(f"✅ File uploaded: {uploaded_file.name}")
+            
+            if st.button("🔗 CONNECT WITH API", type="primary", use_container_width=True, key="api_login"):
+                with st.spinner("🔐 Authenticating with Gmail API..."):
+                    # Read JSON content
+                    credentials_content = uploaded_file.read().decode('utf-8')
+                    
+                    result = authenticate_gmail_api(credentials_content)
+                    
+                    if isinstance(result, tuple):
+                        service, error = result
+                        st.error(f"❌ Authentication failed: {error}")
+                    else:
+                        service = result
+                        user_email = get_user_profile_api(service)
+                        
+                        if user_email:
+                            st.session_state.logged_in = True
+                            st.session_state.email = user_email
+                            st.session_state.gmail_service = service
+                            st.session_state.connection_type = "API"
+                            st.success("✅ Connected via Gmail API!")
+                            st.balloons()
+                            st.rerun()
+                        else:
+                            st.error("Failed to get user profile")
         
         st.markdown("---")
-        st.metric("🔍 Scans", st.session_state.scan_count)
-        st.metric("🗑️ Deleted", st.session_state.deleted)
         
-        st.markdown("---")
+        with st.expander("📖 How to get credentials.json"):
+            st.markdown("""
+            **Step-by-Step Guide:**
+            
+            1. **Go to Google Cloud Console**
+               - Visit: https://console.cloud.google.com
+            
+            2. **Create a Project**
+               - Click "Select Project" → "New Project"
+               - Name it (e.g., "Gmail Cleaner")
+            
+            3. **Enable Gmail API**
+               - Go to "APIs & Services" → "Library"
+               - Search "Gmail API"
+               - Click "Enable"
+            
+            4. **Create Credentials**
+               - Go to "Credentials" → "Create Credentials"
+               - Choose "OAuth 2.0 Client ID"
+               - Application type: "Desktop app"
+               - Download the JSON file
+            
+            5. **Upload Here**
+               - Click the upload button above
+               - Select your downloaded JSON file
+               - Click "Connect with API"
+            
+            [📖 Official Documentation](https://developers.google.com/gmail/api/quickstart/python)
+            """)
         
-        if st.button("🔌 DISCONNECT", use_container_width=True):
-            # Logout confirmation
-            if st.checkbox("Confirm logout"):
-                st.session_state.service = None
-                st.session_state.user_email = None
-                st.session_state.real_emails = []
-                st.session_state.is_real_data = False
-                if os.path.exists('token.pickle'):
-                    os.remove('token.pickle')
-                st.rerun()
-
-# Main Content
-if st.session_state.service is None:
-    # Not connected - Setup page
-    st.markdown('<h1 class="main-title">🛡️ Gmail Spam Cleaner Pro</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Clean Your Real Gmail Inbox with AI</p>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="section-panel">', unsafe_allow_html=True)
-    
-    st.markdown("### 🚀 Get Started in 3 Steps")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        #### 1️⃣ Setup API
-        
-        - Go to [Google Cloud Console](https://console.cloud.google.com)
-        - Create new project
-        - Enable Gmail API
-        - Create OAuth credentials
-        - Download credentials.json
-        """)
-    
-    with col2:
-        st.markdown("""
-        #### 2️⃣ Install Packages
-        
-        ```
-        pip install google-auth
-        pip install google-auth-oauthlib
-        pip install google-api-python-client
-        ```
-        
-        Place credentials.json in app folder
-        """)
-    
-    with col3:
-        st.markdown("""
-        #### 3️⃣ Connect
-        
-        - Click "Connect Gmail" in sidebar
-        - Authorize in browser
-        - Start cleaning spam!
-        
-        🔒 100% Secure OAuth2
-        """)
-    
-    st.markdown("---")
-    
-    st.markdown("### ✨ Features")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        - 🔴 **Real-Time Data** - Access YOUR actual Gmail
-        - 🤖 **Smart Detection** - See what's in your spam folder
-        - 🗑️ **Bulk Delete** - Clean thousands at once
-        - 💾 **Safe Operations** - Emails go to trash (recoverable)
-        - 📊 **Live Stats** - Real inbox metrics
-        """)
-    
-    with col2:
-        st.markdown("""
-        - 🔒 **Bank-Level Security** - OAuth2 authentication
-        - 📧 **Email Preview** - See before you delete
-        - 💿 **Export Reports** - Download your data
-        - ⚡ **Lightning Fast** - Process 100s of emails
-        - 🎯 **Accurate** - Only touches spam folder
-        """)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    # Connected - Show REAL data
+    # Logged In - Show Dashboard
     
-    # Data source indicator banner
-    if st.session_state.is_real_data:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #00ff64 0%, #00cc50 100%); 
-        padding: 1rem 2rem; border-radius: 16px; margin-bottom: 2rem; 
-        text-align: center; box-shadow: 0 4px 20px rgba(0, 255, 100, 0.4);">
-            <div style="font-size: 1.3rem; font-weight: 900; color: #000;">
-                🔴 LIVE DATA MODE - Connected to Your Real Gmail Account
-            </div>
-            <div style="font-size: 1rem; font-weight: 700; color: #0a4a2a; margin-top: 0.3rem;">
-                All data shown below is from your actual inbox
-            </div>
+    # Connection type banner
+    connection_badge = "🔴 LIVE - IMAP Connection" if st.session_state.connection_type == "IMAP" else "🔴 LIVE - Gmail API"
+    
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #ff3366 0%, #ff1744 100%); 
+    padding: 1rem 2rem; border-radius: 16px; margin-bottom: 2rem; 
+    text-align: center; box-shadow: 0 4px 20px rgba(255, 0, 0, 0.4);
+    animation: pulse 2s ease-in-out infinite;">
+        <div style="font-size: 1.3rem; font-weight: 900; color: white;">
+            {connection_badge}
         </div>
-        """, unsafe_allow_html=True)
+        <div style="font-size: 1rem; font-weight: 700; color: rgba(255,255,255,0.9); margin-top: 0.3rem;">
+            Connected to YOUR Real Gmail Account - All Data is LIVE
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # User header
     st.markdown(f"""
     <div class="user-header">
-        <div class="user-info">
-            <div class="user-avatar">{st.session_state.user_email[0].upper()}</div>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <div class="user-avatar">{st.session_state.email[0].upper()}</div>
             <div>
-                <div class="user-email">{st.session_state.user_email}</div>
-                <div class="user-status">✅ Connected to Gmail API</div>
+                <div class="user-email">{st.session_state.email}</div>
+                <div style="color: #0a4a2a; font-weight: 700; margin-top: 0.3rem;">
+                    ✅ Connected via {st.session_state.connection_type}
+                </div>
             </div>
         </div>
-        <div class="real-data-badge">🔴 REAL DATA</div>
+        <div class="live-badge">🔴 LIVE DATA</div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Tabs
-    tab1, tab2, tab3 = st.tabs(["📊 DASHBOARD", "🗑️ CLEAN SPAM", "📈 ANALYTICS"])
+    # Stats
+    col1, col2, col3, col4 = st.columns(4)
     
-    # TAB 1: Dashboard
-    with tab1:
-        st.markdown('<div class="section-panel">', unsafe_allow_html=True)
-        
-        st.markdown("### 📊 Your Gmail Overview")
-        
-        # Real stats
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown(f"""
-            <div class="stat-box">
-                <div class="stat-number">{len(st.session_state.real_emails)}</div>
-                <div class="stat-label">🚨 Spam Found</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            total_size = sum(email.get('size', 0) for email in st.session_state.real_emails) / (1024 * 1024)
-            st.markdown(f"""
-            <div class="stat-box">
-                <div class="stat-number">{total_size:.1f} MB</div>
-                <div class="stat-label">💾 Space Wasted</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div class="stat-box">
-                <div class="stat-number">{st.session_state.deleted}</div>
-                <div class="stat-label">🗑️ Deleted</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown(f"""
-            <div class="stat-box">
-                <div class="stat-number">{st.session_state.scan_count}</div>
-                <div class="stat-label">🔍 Scans</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        st.markdown("### 🎯 Quick Actions")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            max_emails = st.number_input("Emails to load:", 10, 500, 50)
-        
-        with col2:
-            if st.button("🔍 LOAD SPAM", type="primary", use_container_width=True):
-                with st.spinner("📡 Fetching YOUR spam from Gmail..."):
-                    st.session_state.real_emails = get_spam_emails(st.session_state.service, max_emails)
-                    st.session_state.scan_count += 1
-                if st.session_state.real_emails:
-                    st.success(f"✅ Loaded {len(st.session_state.real_emails)} REAL spam emails from YOUR account!")
+    with col1:
+        st.markdown(f"""
+        <div class="stat-box">
+            <div class="stat-number">{len(st.session_state.spam_emails)}</div>
+            <div class="stat-label">🚨 Spam Found</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        total_size = sum(email.get('size', 0) for email in st.session_state.spam_emails) / (1024 * 1024)
+        st.markdown(f"""
+        <div class="stat-box">
+            <div class="stat-number">{total_size:.1f} MB</div>
+            <div class="stat-label">💾 Space Used</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class="stat-box">
+            <div class="stat-number">{st.session_state.deleted}</div>
+            <div class="stat-label">🗑️ Deleted</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        if st.button("🔌 LOGOUT", use_container_width=True):
+            if st.session_state.imap_conn:
+                st.session_state.imap_conn.logout()
+            st.session_state.logged_in = False
+            st.session_state.email = None
+            st.session_state.imap_conn = None
+            st.session_state.gmail_service = None
+            st.session_state.spam_emails = []
+            if os.path.exists('token.pickle'):
+                os.remove('token.pickle')
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Load spam button
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        max_emails = st.slider("Number of emails to load:", 10, 100, 50)
+    
+    with col2:
+        if st.button("🔍 LOAD SPAM", type="primary", use_container_width=True):
+            with st.spinner("📡 Fetching YOUR spam emails..."):
+                if st.session_state.connection_type == "IMAP":
+                    st.session_state.spam_emails = get_spam_emails_imap(st.session_state.imap_conn, max_emails)
                 else:
-                    st.info("🎉 No spam found in your Gmail!")
-        
-        with col3:
-            if st.button("🗑️ DELETE ALL", use_container_width=True):
-                if st.session_state.real_emails:
-                    if st.checkbox("⚠️ Confirm bulk delete"):
-                        with st.spinner("Deleting spam..."):
-                            email_ids = [email['id'] for email in st.session_state.real_emails]
-                            count = bulk_trash_emails(st.session_state.service, email_ids)
-                            st.session_state.deleted += count
-                        st.success(f"✅ Moved {count} emails to trash!")
-                        st.session_state.real_emails = []
-                        st.rerun()
-        
-        with col4:
-            if st.button("🔄 REFRESH", use_container_width=True):
-                st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+                    st.session_state.spam_emails = get_spam_emails_api(st.session_state.gmail_service, max_emails)
+            
+            if st.session_state.spam_emails:
+                st.success(f"✅ Loaded {len(st.session_state.spam_emails)} REAL emails from YOUR Gmail!")
+            else:
+                st.info("🎉 No spam found in your inbox!")
     
-    # TAB 2: Clean Spam
-    with tab2:
-        st.markdown('<div class="section-panel">', unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # Display emails
+    if st.session_state.spam_emails:
+        st.markdown(f"""
+        <div style="font-size: 1.8rem; font-weight: 800; color: #00ff64; margin-bottom: 1.5rem;">
+            🗑️ Your Spam Emails ({len(st.session_state.spam_emails)} found)
+            <span style="font-size: 1rem; background: #ff1744; color: white; padding: 4px 12px; border-radius: 12px; margin-left: 10px;">
+                🔴 REAL DATA FROM YOUR ACCOUNT
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if not st.session_state.real_emails:
-            st.info("👆 Click 'LOAD SPAM' in Dashboard to fetch your real spam emails from Gmail")
-        else:
+        for idx, email_data in enumerate(st.session_state.spam_emails):
             st.markdown(f"""
-            <div class="section-title">
-                🗑️ Your Spam Emails 
-                <span class="real-data-badge">🔴 {len(st.session_state.real_emails)} REAL EMAILS</span>
+            <div class="email-item">
+                <div class="email-subject">
+                    {email_data['subject']}
+                    <span class="spam-badge">SPAM</span>
+                </div>
+                <div class="email-sender">📧 From: {email_data['sender']}</div>
+                <div class="email-meta">🕒 {email_data['date']} | 📧 ID: {email_data['id'][:30]}...</div>
+                <div class="email-preview">📝 {email_data['preview'][:200]}...</div>
             </div>
             """, unsafe_allow_html=True)
             
-            # Display REAL emails
-            for idx, email in enumerate(st.session_state.real_emails):
-                st.markdown(f"""
-                <div class="email-item real-data">
-                    <div class="email-subject">
-                        {email['subject']}
-                        <span class="spam-badge">SPAM</span>
-                    </div>
-                    <div class="email-sender">📧 From: {email['sender']}</div>
-                    <div class="email-meta">
-                        🕒 {email['date']} | 💾 {email['size'] / 1024:.1f} KB | 📧 ID: {email['id'][:20]}...
-                    </div>
-                    <div class="email-preview">
-                        📝 {email['snippet'][:250]}...
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                col1, col2, col3 = st.columns([3, 1, 1])
-                
-                with col2:
-                    if st.button(f"👁️ View Full", key=f"view_{idx}", use_container_width=True):
-                        with st.expander("Full Email Details", expanded=True):
-                            st.markdown(f"""
-                            **🔴 REAL EMAIL FROM YOUR GMAIL**
-                            
-                            **Message ID:** `{email['id']}`  
-                            **Subject:** {email['subject']}  
-                            **From:** {email['sender']}  
-                            **Date:** {email['date']}  
-                            **Size:** {email['size'] / 1024:.2f} KB  
-                            
-                            **Preview:**  
-                            {email['snippet']}
-                            
-                            ---
-                            
-                            This is a real email from your Gmail spam folder.
-                            """)
-                
-                with col3:
-                    if st.button(f"🗑️ Delete", key=f"del_{idx}", use_container_width=True):
-                        if trash_email(st.session_state.service, email['id']):
-                            st.success(f"✅ Moved to trash!")
-                            st.session_state.deleted += 1
-                            st.session_state.real_emails.pop(idx)
-                            st.rerun()
-                
-                if idx < len(st.session_state.real_emails) - 1:
-                    st.markdown("---")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    # TAB 3: Analytics
-    with tab3:
-        st.markdown('<div class="section-panel">', unsafe_allow_html=True)
-        
-        st.markdown("### 📈 Your Real Email Analytics")
-        
-        if st.session_state.real_emails:
-            # Analyze real data
-            df = pd.DataFrame(st.session_state.real_emails)
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("#### 📧 Top Spam Senders (Your Data)")
-                sender_counts = df['sender'].value_counts().head(10)
-                st.dataframe(sender_counts.reset_index().rename(
-                    columns={'index': 'Sender', 'sender': 'Count'}
-                ), use_container_width=True)
+            col1, col2, col3 = st.columns([3, 1, 1])
             
             with col2:
-                st.markdown("#### 💾 Email Sizes")
-                st.dataframe(df[['subject', 'size']].sort_values('size', ascending=False).head(10))
+                if st.button(f"👁️ Details", key=f"view_{idx}", use_container_width=True):
+                    with st.expander("Full Email Details", expanded=True):
+                        st.markdown(f"""
+                        **🔴 REAL EMAIL FROM YOUR GMAIL**
+                        
+                        **Subject:** {email_data['subject']}  
+                        **From:** {email_data['sender']}  
+                        **Date:** {email_data['date']}  
+                        **Message ID:** `{email_data['id']}`  
+                        
+                        **Preview:**  
+                        {email_data['preview']}
+                        """)
             
-            st.markdown("---")
+            with col3:
+                if st.button(f"🗑️ Delete", key=f"del_{idx}", use_container_width=True):
+                    success = False
+                    if st.session_state.connection_type == "IMAP":
+                        success = delete_email_imap(st.session_state.imap_conn, email_data['id'].encode())
+                    else:
+                        success = trash_email_api(st.session_state.gmail_service, email_data['id'])
+                    
+                    if success:
+                        st.success("✅ Deleted!")
+                        st.session_state.deleted += 1
+                        st.session_state.spam_emails.pop(idx)
+                        st.rerun()
             
-            # Export real data
-            if st.button("📥 EXPORT YOUR DATA", type="primary"):
-                csv = df.to_csv(index=False)
-                st.download_button(
-                    "📥 Download CSV",
-                    csv,
-                    f"gmail_spam_{st.session_state.user_email}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    "text/csv"
-                )
-        else:
-            st.info("Load spam emails first to see analytics")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+            if idx < len(st.session_state.spam_emails) - 1:
+                st.markdown("---")
+    else:
+        st.info("👆 Click 'LOAD SPAM' to fetch your real spam emails from Gmail")
 
 # Footer
 st.markdown("---")
@@ -867,10 +763,10 @@ border-radius: 16px; border: 1px solid rgba(0, 255, 100, 0.2);">
         🛡️ Gmail Spam Cleaner Pro
     </div>
     <div style="font-size: 1.1rem; color: #b3ffcc; margin-top: 0.5rem;">
-        {"🔴 LIVE MODE - Connected to " + st.session_state.user_email if st.session_state.is_real_data else "Ready to Connect to Your Gmail"}
+        {"🔴 LIVE - " + st.session_state.connection_type + " - " + st.session_state.email if st.session_state.logged_in else "Choose Your Login Method"}
     </div>
-    <div style="font-size: 0.9rem; color: #7fff9f; margin-top: 0.8rem;">
-        Secure OAuth2 • Privacy Protected • No Data Stored
+    <div style="font-size: 0.9rem; color: #7fff9f; margin-top: 0.5rem;">
+        Two Login Options • IMAP or Gmail API • Your Choice
     </div>
 </div>
 """, unsafe_allow_html=True)
