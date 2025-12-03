@@ -1,24 +1,18 @@
 import streamlit as st
-import base64
-from datetime import datetime
-import pandas as pd
 import random
+import string
+from datetime import datetime, timedelta
+import pandas as pd
 
 # Page configuration
 st.set_page_config(
-    page_title="Gmail Spam Sorter & Cleaner - Auto Delete Spam Emails",
-    page_icon="📧",
+    page_title="Gmail Spam Cleaner - Auto Delete Spam",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# SEO Meta Tags
-st.markdown("""
-<meta name="description" content="Free Gmail spam sorter and cleaner. Automatically detect and delete spam emails. Clean your inbox instantly. Smart AI-powered spam detection.">
-<meta name="keywords" content="gmail spam filter, delete spam emails, gmail cleaner, inbox organizer, auto delete spam, email sorter">
-""", unsafe_allow_html=True)
-
-# Futuristic Cyberpunk CSS
+# FIXED CSS - Removed problematic z-index and pseudo-elements
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap');
@@ -27,190 +21,82 @@ st.markdown("""
         font-family: 'Rajdhani', sans-serif;
     }
     
-    /* Matrix-style background */
     .stApp {
-        background: #000000;
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .stApp::before {
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: 
-            linear-gradient(90deg, transparent 0%, rgba(0, 255, 65, 0.03) 50%, transparent 100%),
-            repeating-linear-gradient(0deg, rgba(0, 255, 65, 0.05) 0px, transparent 2px, transparent 4px, rgba(0, 255, 65, 0.05) 6px);
-        pointer-events: none;
-        z-index: 0;
+        background: linear-gradient(135deg, #000000, #0a1a0a, #001a00);
     }
     
     .main .block-container {
         background: linear-gradient(135deg, rgba(0, 20, 10, 0.95) 0%, rgba(10, 30, 20, 0.95) 100%);
         border-radius: 20px;
         padding: 3rem;
-        box-shadow: 
-            0 0 100px rgba(0, 255, 65, 0.3),
-            inset 0 0 50px rgba(0, 255, 65, 0.05);
+        box-shadow: 0 0 60px rgba(0, 255, 65, 0.3);
         border: 2px solid rgba(0, 255, 65, 0.3);
-        position: relative;
-        z-index: 1;
     }
     
-    /* Glowing title */
     .main-title {
         text-align: center;
         font-family: 'Orbitron', sans-serif;
         background: linear-gradient(135deg, #00ff41 0%, #00ff88 50%, #00ffdd 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-size: 4.5rem;
+        font-size: 4rem;
         font-weight: 900;
         margin-bottom: 1rem;
-        text-shadow: 0 0 50px rgba(0, 255, 65, 0.8);
-        letter-spacing: 5px;
-        animation: titleGlow 2s ease-in-out infinite;
-    }
-    
-    @keyframes titleGlow {
-        0%, 100% { filter: brightness(1) drop-shadow(0 0 20px rgba(0, 255, 65, 0.8)); }
-        50% { filter: brightness(1.5) drop-shadow(0 0 40px rgba(0, 255, 65, 1)); }
+        letter-spacing: 3px;
     }
     
     .subtitle {
         text-align: center;
         color: #00ff41;
-        font-size: 1.6rem;
+        font-size: 1.4rem;
         margin-bottom: 3rem;
         font-weight: 700;
-        text-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
-        letter-spacing: 3px;
+        letter-spacing: 2px;
         text-transform: uppercase;
     }
     
-    /* Cyber panels */
     .cyber-panel {
-        background: linear-gradient(135deg, rgba(0, 50, 25, 0.8) 0%, rgba(0, 30, 15, 0.8) 100%);
+        background: linear-gradient(135deg, rgba(0, 50, 25, 0.6) 0%, rgba(0, 30, 15, 0.6) 100%);
         border: 2px solid #00ff41;
         border-radius: 15px;
         padding: 2.5rem;
         margin: 2rem 0;
-        box-shadow: 
-            0 0 30px rgba(0, 255, 65, 0.4),
-            inset 0 0 30px rgba(0, 255, 65, 0.05);
-        position: relative;
-        overflow: hidden;
+        box-shadow: 0 0 30px rgba(0, 255, 65, 0.3);
     }
     
-    .cyber-panel::before {
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: -2px;
-        right: -2px;
-        bottom: -2px;
-        background: linear-gradient(45deg, #00ff41, transparent, #00ff88, transparent);
-        border-radius: 15px;
-        opacity: 0;
-        transition: opacity 0.3s;
-        z-index: -1;
-    }
-    
-    .cyber-panel:hover::before {
-        opacity: 0.3;
-        animation: borderGlow 2s linear infinite;
-    }
-    
-    @keyframes borderGlow {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-    
-    /* Holographic buttons */
-    .stButton>button {
-        width: 100%;
-        background: linear-gradient(135deg, #00ff41 0%, #00ff88 100%);
-        color: #000000;
-        border: none;
-        border-radius: 10px;
-        padding: 1.3rem 2.5rem;
-        font-size: 1.3rem;
-        font-weight: 900;
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        transition: all 0.3s;
-        box-shadow: 
-            0 0 30px rgba(0, 255, 65, 0.6),
-            inset 0 0 20px rgba(255, 255, 255, 0.2);
-        position: relative;
-        overflow: hidden;
-        font-family: 'Orbitron', sans-serif;
-    }
-    
-    .stButton>button::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-        transition: left 0.5s;
-    }
-    
-    .stButton>button:hover::before {
-        left: 100%;
-    }
-    
-    .stButton>button:hover {
-        transform: translateY(-3px) scale(1.02);
-        box-shadow: 
-            0 0 50px rgba(0, 255, 65, 0.9),
-            inset 0 0 30px rgba(255, 255, 255, 0.3);
-        background: linear-gradient(135deg, #00ff88 0%, #00ffdd 100%);
-    }
-    
-    /* Stats display */
     .stat-box {
         background: linear-gradient(135deg, rgba(0, 255, 65, 0.1) 0%, rgba(0, 255, 136, 0.1) 100%);
         border: 2px solid #00ff41;
         border-radius: 12px;
         padding: 2rem;
         text-align: center;
-        box-shadow: 
-            0 0 25px rgba(0, 255, 65, 0.3),
-            inset 0 0 20px rgba(0, 255, 65, 0.05);
+        box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
         transition: all 0.3s;
     }
     
     .stat-box:hover {
         transform: translateY(-5px);
-        box-shadow: 0 0 40px rgba(0, 255, 65, 0.5);
+        box-shadow: 0 0 35px rgba(0, 255, 65, 0.5);
     }
     
     .stat-number {
         font-family: 'Orbitron', sans-serif;
-        font-size: 3.5rem;
+        font-size: 3rem;
         font-weight: 900;
         background: linear-gradient(135deg, #00ff41 0%, #00ffdd 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 30px rgba(0, 255, 65, 0.8);
         margin: 1rem 0;
     }
     
     .stat-label {
         color: #00ff88;
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 2px;
+        letter-spacing: 1px;
     }
     
-    /* Email list */
     .email-item {
         background: rgba(0, 40, 20, 0.6);
         border-left: 4px solid #00ff41;
@@ -219,19 +105,18 @@ st.markdown("""
         margin: 1rem 0;
         box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
         transition: all 0.3s;
-        cursor: pointer;
     }
     
     .email-item:hover {
         background: rgba(0, 50, 25, 0.8);
         border-left-width: 6px;
-        transform: translateX(10px);
+        transform: translateX(5px);
         box-shadow: 0 0 25px rgba(0, 255, 65, 0.4);
     }
     
     .email-subject {
         color: #00ff41;
-        font-size: 1.3rem;
+        font-size: 1.2rem;
         font-weight: 700;
         margin-bottom: 0.5rem;
     }
@@ -253,7 +138,7 @@ st.markdown("""
         color: white;
         padding: 4px 12px;
         border-radius: 20px;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 1px;
@@ -262,7 +147,28 @@ st.markdown("""
         margin-left: 10px;
     }
     
-    /* Tabs */
+    .stButton>button {
+        width: 100%;
+        background: linear-gradient(135deg, #00ff41 0%, #00ff88 100%);
+        color: #000000;
+        border: none;
+        border-radius: 10px;
+        padding: 1rem 2rem;
+        font-size: 1.1rem;
+        font-weight: 900;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        transition: all 0.3s;
+        box-shadow: 0 0 25px rgba(0, 255, 65, 0.5);
+        font-family: 'Orbitron', sans-serif;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0 40px rgba(0, 255, 65, 0.7);
+        background: linear-gradient(135deg, #00ff88 0%, #00ffdd 100%);
+    }
+    
     .stTabs [data-baseweb="tab-list"] {
         gap: 15px;
         background: rgba(0, 40, 20, 0.5);
@@ -273,31 +179,24 @@ st.markdown("""
     
     .stTabs [data-baseweb="tab"] {
         border-radius: 10px;
-        padding: 15px 30px;
+        padding: 14px 28px;
         font-weight: 900;
         color: #00ff41;
-        font-size: 1.1rem;
+        font-size: 1rem;
         letter-spacing: 2px;
         text-transform: uppercase;
-        transition: all 0.3s;
         font-family: 'Orbitron', sans-serif;
-    }
-    
-    .stTabs [data-baseweb="tab"]:hover {
-        background: rgba(0, 255, 65, 0.1);
-        transform: translateY(-2px);
     }
     
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #00ff41 0%, #00ff88 100%) !important;
         color: #000000 !important;
-        box-shadow: 0 0 30px rgba(0, 255, 65, 0.6);
+        box-shadow: 0 0 25px rgba(0, 255, 65, 0.5);
     }
     
-    /* Metrics */
     [data-testid="stMetricValue"] {
         font-family: 'Orbitron', sans-serif;
-        font-size: 3rem;
+        font-size: 2.5rem;
         font-weight: 900;
         background: linear-gradient(135deg, #00ff41 0%, #00ffdd 100%);
         -webkit-background-clip: text;
@@ -308,39 +207,17 @@ st.markdown("""
         color: #00ff88 !important;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 2px;
+        letter-spacing: 1px;
     }
     
-    /* Progress bar */
-    .stProgress > div > div > div {
-        background: linear-gradient(90deg, #00ff41 0%, #00ff88 100%);
-        box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
-    }
-    
-    /* Alert boxes */
-    .stSuccess {
+    .stAlert {
         background: rgba(0, 255, 65, 0.1) !important;
         border: 2px solid #00ff41 !important;
         border-radius: 10px !important;
         color: #00ff41 !important;
-        box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+        box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
     }
     
-    .stWarning {
-        background: rgba(255, 165, 0, 0.1) !important;
-        border: 2px solid #ffaa00 !important;
-        border-radius: 10px !important;
-        color: #ffaa00 !important;
-    }
-    
-    .stError {
-        background: rgba(255, 0, 0, 0.1) !important;
-        border: 2px solid #ff0000 !important;
-        border-radius: 10px !important;
-        color: #ff4444 !important;
-    }
-    
-    /* Selectbox */
     .stSelectbox > div > div {
         background: rgba(0, 40, 20, 0.8);
         border: 2px solid #00ff41;
@@ -348,44 +225,11 @@ st.markdown("""
         color: #00ff41;
     }
     
-    /* Checkbox */
-    .stCheckbox {
-        color: #00ff88 !important;
-    }
-    
-    /* Dataframe */
     .stDataFrame {
         border: 2px solid #00ff41;
         border-radius: 10px;
         overflow: hidden;
-        box-shadow: 0 0 25px rgba(0, 255, 65, 0.3);
-    }
-    
-    /* Scanner animation */
-    @keyframes scan {
-        0%, 100% { transform: translateY(-100%); }
-        50% { transform: translateY(100%); }
-    }
-    
-    .scanner {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, #00ff41, transparent);
-        box-shadow: 0 0 20px #00ff41;
-        animation: scan 3s linear infinite;
-    }
-    
-    /* Terminal text */
-    code {
-        font-family: 'Orbitron', monospace;
-        background: rgba(0, 255, 65, 0.1);
-        padding: 4px 8px;
-        border-radius: 5px;
-        color: #00ff41;
-        border: 1px solid rgba(0, 255, 65, 0.3);
+        box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
     }
     
     h3 {
@@ -397,6 +241,15 @@ st.markdown("""
     
     p, li {
         color: #00ff88 !important;
+    }
+    
+    code {
+        font-family: 'Orbitron', monospace;
+        background: rgba(0, 255, 65, 0.1);
+        padding: 4px 8px;
+        border-radius: 5px;
+        color: #00ff41;
+        border: 1px solid rgba(0, 255, 65, 0.3);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -425,7 +278,7 @@ DEMO_SPAM = [
 
 # Title
 st.markdown('<h1 class="main-title">🛡️ GMAIL SPAM TERMINATOR</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">⚡ AI-Powered Spam Detection & Auto-Delete System</p>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">⚡ AI-Powered Spam Detection & Auto-Delete</p>', unsafe_allow_html=True)
 
 # Sidebar - Gmail Connection
 with st.sidebar:
@@ -512,14 +365,24 @@ if not st.session_state.connected:
     st.markdown("---")
     
     st.warning("""
-    **⚠️ Important:** This is a demo app. To actually access and delete emails from your Gmail account, you need to:
+    **⚠️ Important:** This is a demo app showing the UI/UX. To actually access Gmail:
     
-    1. Set up Gmail API credentials from Google Cloud Console
-    2. Install required packages: `google-auth`, `google-auth-oauthlib`, `google-api-python-client`
-    3. Implement OAuth2 authentication flow
-    4. Use Gmail API methods to list, filter, and delete messages
+    **Required Steps:**
+    1. Set up Gmail API credentials from [Google Cloud Console](https://console.cloud.google.com)
+    2. Install: `pip install google-auth google-auth-oauthlib google-api-python-client`
+    3. Implement OAuth2 authentication
+    4. Use Gmail API to list and delete messages
     
-    [📖 Gmail API Documentation](https://developers.google.com/gmail/api/reference/rest)
+    **Quick Start Code:**
+    ```
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    
+    service = build('gmail', 'v1', credentials=creds)
+    results = service.users().messages().list(userId='me', q='is:spam').execute()
+    ```
+    
+    [📖 Gmail API Docs](https://developers.google.com/gmail/api)
     """)
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -531,7 +394,6 @@ else:
     # TAB 1: Dashboard
     with tab1:
         st.markdown('<div class="cyber-panel">', unsafe_allow_html=True)
-        st.markdown('<div class="scanner"></div>', unsafe_allow_html=True)
         
         st.markdown("### 📊 Inbox Overview")
         
@@ -595,7 +457,14 @@ else:
         
         with col3:
             if st.button("📥 EXPORT REPORT", use_container_width=True):
-                st.info("📊 Report generated!")
+                df_report = pd.DataFrame(DEMO_SPAM)
+                csv = df_report.to_csv(index=False)
+                st.download_button(
+                    "📥 Download CSV",
+                    csv,
+                    "spam_report.csv",
+                    "text/csv"
+                )
         
         st.markdown('</div>', unsafe_allow_html=True)
     
@@ -730,23 +599,19 @@ else:
 # Footer
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; padding: 2.5rem; 
-background: linear-gradient(135deg, rgba(0, 50, 25, 0.8) 0%, rgba(0, 30, 15, 0.8) 100%); 
+<div style="text-align: center; padding: 2rem; 
+background: linear-gradient(135deg, rgba(0, 50, 25, 0.6) 0%, rgba(0, 30, 15, 0.6) 100%); 
 border: 2px solid #00ff41;
-border-radius: 20px; 
-box-shadow: 0 0 40px rgba(0, 255, 65, 0.4);">
-    <div style="font-size: 2.5rem; font-weight: 900; color: #00ff41; margin-bottom: 1rem; font-family: 'Orbitron', sans-serif; letter-spacing: 3px;">
+border-radius: 15px; 
+box-shadow: 0 0 30px rgba(0, 255, 65, 0.3);">
+    <div style="font-size: 2rem; font-weight: 900; color: #00ff41; margin-bottom: 1rem; font-family: 'Orbitron', sans-serif;">
         🛡️ GMAIL SPAM TERMINATOR
     </div>
-    <div style="font-size: 1.3rem; color: #00ff88; font-weight: 700; margin-bottom: 0.5rem;">
+    <div style="font-size: 1.2rem; color: #00ff88; font-weight: 700;">
         Made with ❤️ using Streamlit & Gmail API
     </div>
-    <div style="font-size: 1.1rem; color: #00ffaa;">
+    <div style="font-size: 1rem; color: #00ffaa; margin-top: 0.5rem;">
         Secure • Fast • Efficient • AI-Powered
-    </div>
-    <div style="font-size: 0.95rem; margin-top: 1.5rem; color: #00ff88; font-weight: 600;">
-        ⚡ Protect Your Inbox • Delete Spam Automatically • Stay Organized ⚡
     </div>
 </div>
 """, unsafe_allow_html=True)
-
